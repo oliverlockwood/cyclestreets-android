@@ -1,49 +1,32 @@
 package org.mapsforge.android.maps;
 
-import java.io.File;
-import java.io.InputStream;
+import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 
-import org.mapsforge.android.maps.mapgenerator.JobParameters;
-import org.mapsforge.android.maps.mapgenerator.JobTheme;
-import org.mapsforge.android.maps.mapgenerator.MapGeneratorJob;
-import org.mapsforge.android.maps.mapgenerator.databaserenderer.DatabaseRenderer;
-import org.mapsforge.core.BoundingBox;
-import org.mapsforge.core.Tile;
+import org.mapsforge.core.model.BoundingBox;
+import org.mapsforge.core.model.Tile;
+import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
+import org.mapsforge.map.layer.renderer.DatabaseRenderer;
+import org.mapsforge.map.layer.renderer.RendererJob;
+import org.mapsforge.map.model.DisplayModel;
 import org.mapsforge.map.reader.MapDatabase;
+import org.mapsforge.map.rendertheme.InternalRenderTheme;
 import org.osmdroid.ResourceProxy;
 import org.osmdroid.tileprovider.ExpirableBitmapDrawable;
 import org.osmdroid.tileprovider.MapTile;
 import org.osmdroid.tileprovider.tilesource.BitmapTileSourceBase.LowMemoryException;
 import org.osmdroid.tileprovider.tilesource.ITileSource;
 
-import android.graphics.Bitmap;
-import android.graphics.drawable.Drawable;
+import java.io.File;
+import java.io.InputStream;
 
 public class MapsforgeOSMTileSource implements ITileSource {
-  @SuppressWarnings("serial")
-  private static class RenderTheme implements JobTheme {
-    //private static final String path = "/org/mapsforge/android/maps/rendertheme/osmarender/";
-    private static final String path="/assets/rendertheme/";
-    private static final String file = "osmarender.xml";
-
-    //@Override
-    //public String getRelativePathPrefix() {
-    //  return path;
-    //}
-    
-    @Override
-    public InputStream getRenderThemeAsStream() {
-      final InputStream is = getClass().getResourceAsStream(path+file);
-      return is;
-    }
-  }          
 
   private static final float DEFAULT_TEXT_SCALE = 1;
   private final String name_;
   private final DatabaseRenderer mapGenerator_;
   private final MapDatabase mapDatabase_;
-  private final JobParameters jobParameters_;
-  private final DebugSettings debugSettings_;
+  private final DisplayModel displayModel;
   private String mapFile_;
   private BoundingBox mapBounds_;
   private int zoomBounds_;
@@ -56,12 +39,9 @@ public class MapsforgeOSMTileSource implements ITileSource {
   public MapsforgeOSMTileSource(final String name,
                                 final boolean upSize) {
     name_ = name;
-    mapGenerator_ = new DatabaseRenderer();
     mapDatabase_ = new MapDatabase();
-    mapGenerator_.setMapDatabase(mapDatabase_);
-        
-    jobParameters_ = new JobParameters(new RenderTheme(), DEFAULT_TEXT_SCALE);
-    debugSettings_ = new DebugSettings(false, false, false);
+    mapGenerator_ = new DatabaseRenderer(mapDatabase_, AndroidGraphicFactory.INSTANCE);
+    displayModel = new DisplayModel();
 
     tileSize_ = upSize ? 512 : 256;
   } // MapsforgeOSMTileSource
@@ -95,13 +75,17 @@ public class MapsforgeOSMTileSource implements ITileSource {
 		  return null;
 	  
     final Tile tile = new Tile(tileX, tileY, (byte)zoom);
-    MapGeneratorJob mapGeneratorJob = new MapGeneratorJob(tile, 
-                                                          "ooot",                                                           
-                                                          jobParameters_,
-                                                          debugSettings_);
+    RendererJob rendererJob = new RendererJob(tile,
+                                              "ooot",
+                                              InternalRenderTheme.OSMARENDER,
+                                              displayModel,
+                                              displayModel.getScaleFactor(),
+                                              false);
 
-    Bitmap tileBitmap = Bitmap.createBitmap(Tile.TILE_SIZE, Tile.TILE_SIZE, Bitmap.Config.RGB_565);
-    boolean success = mapGenerator_.executeJob(mapGeneratorJob, tileBitmap);
+    Bitmap tileBitmap = Bitmap.createBitmap(displayModel.getTileSize(),
+                                            displayModel.getTileSize(),
+                                            Bitmap.Config.RGB_565);
+    tileBitmap = mapGenerator_.executeJob(rendererJob);
 
     if (tileSize_ != Tile.TILE_SIZE)
       tileBitmap = Bitmap.createScaledBitmap(tileBitmap, tileSize_, tileSize_, false);
